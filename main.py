@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from playwright.async_api import async_playwright
 from typing import Optional, List
 
 app = FastAPI()
@@ -14,49 +13,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def get_cashtag_suggestions(query: str) -> List[dict]:
-    """
-    Function to scrape and get cashtag suggestions from CashApp profiles.
-    This will return real-time results based on user input.
-    """
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+@app.get("/")
+def root():
+    return {"message": "Cashtag Grabber API is running."}
 
-        search_url = f"https://cash.app/{query}"
-        await page.goto(search_url)
-
-        results = []
-        try:
-            # Extract relevant cashtag suggestions (example: we can get meta tags or visible data)
-            # This is just a placeholder for actual scraping logic
-            # You can parse the page and extract relevant cashtag matches
-            name = await page.get_attribute('meta[property="og:title"]', 'content')
-            image = await page.get_attribute('meta[property="og:image"]', 'content')
-            
-            # If valid data is found
-            if name and image:
-                results.append({
-                    "name": name,
-                    "cashtag": f"${query}",
-                    "profile_picture": image
-                })
-        except Exception as e:
-            print(f"Error scraping {query}: {e}")
-        finally:
-            await browser.close()
-
-        return results
+# Function to generate variations of a cashtag
+def generate_variations(tag: str) -> List[str]:
+    variations = [tag]  # Start with the original tag
+    # Generate number-based variations
+    for i in range(1, 6):  # We will generate 5 variations (e.g., tag123, tag234, etc.)
+        variations.append(f"{tag}{i}")
+    return variations
 
 @app.get("/cashtag")
-async def get_cashtag_info(tag: Optional[str] = Query(..., min_length=1)):
+def get_cashtag_info(tag: Optional[str] = None):
     if not tag:
         return {"error": "No tag provided"}
 
-    # Get dynamic suggestions based on the tag search
-    suggestions = await get_cashtag_suggestions(tag)
+    # Generate variations for the tag
+    variations = generate_variations(tag)
 
-    if not suggestions:
-        return {"error": "No suggestions found for this tag"}
-
-    return {"cashtag_suggestions": suggestions}
+    # Mock data for each variation (replace with actual scraping if needed)
+    cashtag_results = []
+    for var in variations:
+        cashtag_results.append({
+            "name": f"User for {var}",  # You would replace this with real name from scraping
+            "cashtag": f"${var}",
+            "profile_picture": f"https://cash.app/p/{var}.jpg"  # Placeholder PFP URL
+        })
+    
+    return {"cashtag_suggestions": cashtag_results}
