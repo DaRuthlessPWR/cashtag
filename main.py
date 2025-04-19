@@ -1,34 +1,30 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import httpx
-from bs4 import BeautifulSoup
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 app = FastAPI()
 
-class CashtagInfo(BaseModel):
-    name: str
-    cashtag: str
-    profile_picture: str
+# CORS setup to allow requests from FlutterFlow
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all for testing (set specific domain in production)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/cashtag/{tag}", response_model=CashtagInfo)
-async def get_cashtag_info(tag: str):
-    url = f"https://cash.app/${tag}"
+@app.get("/")
+def root():
+    return {"message": "Cashtag Grabber API is running."}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
+@app.get("/cashtag")
+def get_cashtag_info(tag: Optional[str] = None):
+    if not tag:
+        return {"error": "No tag provided"}
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=404, detail="Cashtag not found")
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    try:
-        name = soup.find("meta", {"property": "og:title"})["content"]
-        image = soup.find("meta", {"property": "og:image"})["content"]
-        return CashtagInfo(
-            name=name,
-            cashtag=f"${tag}",
-            profile_picture=image
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Could not parse profile")
+    # Example mock data, replace this with real scraping logic if needed
+    return {
+        "name": "John Doe",
+        "cashtag": f"${tag}",
+        "profile_picture": f"https://cash.app/p/{tag}.jpg"
+    }
