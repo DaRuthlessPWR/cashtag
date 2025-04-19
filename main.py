@@ -1,43 +1,53 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-from playwright.async_api import async_playwright
-import asyncio
 import os
+from playwright.async_api import async_playwright
 
 app = FastAPI()
 
+# CORS for FlutterFlow
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this in prod
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-BROWSERLESS_WS = os.getenv("BROWSERLESS_WS")  # set in Railway
+@app.get("/")
+def root():
+    return {"message": "Cashtag Grabber API is running."}
 
 @app.get("/cashtag")
-async def get_cashtag_info(tag: Optional[str] = None):
+async def get_cashtag_info(tag: Optional[str] = Query(None)):
     if not tag:
         return {"error": "No tag provided"}
 
-    url = f"https://cash.app/${tag}"
+    ws_endpoint = os.getenv("BROWSERLESS_WS")
+    if not ws_endpoint:
+        return {"error": "Browserless WebSocket URL not set"}
+
+    url = f"https://cash.app/{tag}"
 
     async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp(BROWSERLESS_WS)
+        browser = await p.chromium.connect_over_cdp(ws_endpoint)
         context = await browser.new_context()
         page = await context.new_page()
-        await page.goto(url, timeout=15000)
+
+        await page.goto(url, wait_until="networkidle")
 
         try:
-            name = await page.locator('[data-testid="profile-name"]').inner_text()
-            profile_pic = await page.locator('img[alt="profile"]').get_attribute('src')
-        except:
-            return {"error": "Profile not found or changed"}
+            name = await page.inner_text("h2.css-1dp5vir")
+            img = await page.get_attribute("img[alt*='Profile']", "src")
+            cashtag = await page.inner_text("div.css-18suhml span")
 
-        return {
-            "name": name,
-            "cashtag": f"${tag}",
-            "profile_picture": profile_pic,
-        }
+            return {
+                "name": name,
+                "cashtag": cashtag,
+                "profile_picture": img
+            }
+        except Exception as e:
+            return {"error": f"Failed to scrape: {str(e)}"}
+        finally:
+            await browser.close()
