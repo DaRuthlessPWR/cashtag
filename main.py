@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 app = FastAPI()
 
-# CORS setup for FlutterFlow
+# Allow FlutterFlow (and all origins for now)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,44 +16,40 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "Cashtag Grabber API is live."}
+    return {"message": "Cashtag Grabber API is running."}
 
 @app.get("/cashtag")
 def get_cashtag_info(tag: Optional[str] = None):
     if not tag:
         return {"error": "No tag provided"}
 
-    url = f"https://cash.app/{tag.lstrip('$')}"
-
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.goto(url, timeout=60000)
+            url = f"https://cash.app/${tag}"
+            page.goto(url, timeout=15000)  # 15s timeout
 
-            name_selector = "h2[class*=css]"
-            img_selector = "img[src*='/p/']"
+            # Wait for a visible element that always loads if the profile exists
+            page.wait_for_selector('img[src^="https://cash.app/p/"]', timeout=10000)
 
-            try:
-                name = page.inner_text(name_selector, timeout=5000)
-            except PlaywrightTimeout:
-                name = None
+            # Extract data
+            name_element = page.query_selector('h2')  # Name
+            name = name_element.inner_text().strip() if name_element else None
 
-            try:
-                image_url = page.locator(img_selector).get_attribute("src", timeout=5000)
-            except PlaywrightTimeout:
-                image_url = None
+            profile_img = page.query_selector('img[src^="https://cash.app/p/"]')
+            profile_url = profile_img.get_attribute("src") if profile_img else None
 
-            browser.close()
-
-            if not name and not image_url:
-                return {"error": f"Cashtag ${tag} not found or blocked"}
+            if not name or not profile_url:
+                raise Exception("Missing profile info")
 
             return {
+                "name": name,
                 "cashtag": f"${tag}",
-                "name": name or "Unknown",
-                "profile_picture": image_url or "Not available"
+                "profile_picture": profile_url
             }
 
+    except PlaywrightTimeoutError:
+        return {"error": f"Timeout waiting for page for ${tag}"}
     except Exception as e:
-        return {"error": f"Failed to scrape: {str(e)}"}
+        return {"error": f"Cashtag ${tag} not found or blocked. Detail: {str(e)}"}
