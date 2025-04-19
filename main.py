@@ -30,15 +30,13 @@ def get_cashtag_info(tag: Optional[str] = None):
             page.goto(url, timeout=20000)
             page.wait_for_load_state("networkidle")
 
-            # Check if page shows "not found"
-            if "doesn’t exist" in page.content():
-                return {"error": f"Cashtag ${tag} not found."}
+            # Optional: debug print the raw page HTML
+            print(page.content())
 
-            # Try known profile selectors
-            name_element = page.query_selector('h2')
+            name_element = page.query_selector("h2[class^='chakra-heading']")
+            image_element = page.query_selector("img[class^='chakra-image']")
+
             name = name_element.inner_text().strip() if name_element else None
-
-            image_element = page.query_selector('img[src^="https://cash.app/p/"]')
             profile_picture = image_element.get_attribute("src") if image_element else None
 
             if not name or not profile_picture:
