@@ -5,7 +5,6 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 app = FastAPI()
 
-# Allow FlutterFlow (and all origins for now)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,25 +27,27 @@ def get_cashtag_info(tag: Optional[str] = None):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             url = f"https://cash.app/${tag}"
-            page.goto(url, timeout=15000)  # 15s timeout
+            page.goto(url, timeout=20000)
+            page.wait_for_load_state("networkidle")
 
-            # Wait for a visible element that always loads if the profile exists
-            page.wait_for_selector('img[src^="https://cash.app/p/"]', timeout=10000)
+            # Check if page shows "not found"
+            if "doesn’t exist" in page.content():
+                return {"error": f"Cashtag ${tag} not found."}
 
-            # Extract data
-            name_element = page.query_selector('h2')  # Name
+            # Try known profile selectors
+            name_element = page.query_selector('h2')
             name = name_element.inner_text().strip() if name_element else None
 
-            profile_img = page.query_selector('img[src^="https://cash.app/p/"]')
-            profile_url = profile_img.get_attribute("src") if profile_img else None
+            image_element = page.query_selector('img[src^="https://cash.app/p/"]')
+            profile_picture = image_element.get_attribute("src") if image_element else None
 
-            if not name or not profile_url:
-                raise Exception("Missing profile info")
+            if not name or not profile_picture:
+                raise Exception("Profile data missing")
 
             return {
                 "name": name,
                 "cashtag": f"${tag}",
-                "profile_picture": profile_url
+                "profile_picture": profile_picture
             }
 
     except PlaywrightTimeoutError:
