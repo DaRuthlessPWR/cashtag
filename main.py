@@ -1,53 +1,43 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from playwright.async_api import async_playwright
-import logging
+import asyncio
+import os
 
 app = FastAPI()
 
-# Allow all origins — restrict in production!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Update this in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
-
-@app.get("/")
-def root():
-    return {"message": "Cashtag Grabber API is running."}
-
-async def scrape_cashtag(tag: str) -> dict:
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        url = f"https://cash.app/${tag}"
-
-        try:
-            await page.goto(url, timeout=15000)
-
-            name = await page.get_attribute('meta[property="og:title"]', 'content')
-            profile_picture = await page.get_attribute('meta[property="og:image"]', 'content')
-
-            if not name or not profile_picture:
-                return {"error": "Missing info or invalid cashtag."}
-
-            return {
-                "name": name,
-                "cashtag": f"${tag}",
-                "profile_picture": profile_picture
-            }
-
-        except Exception as e:
-            logging.exception("Scraping failed")
-            return {"error": str(e)}
-
-        finally:
-            await browser.close()
+BROWSERLESS_WS = os.getenv("BROWSERLESS_WS")  # set in Railway
 
 @app.get("/cashtag")
-async def get_cashtag_info(tag: str = Query(..., min_length=1)):
-    return await scrape_cashtag(tag)
+async def get_cashtag_info(tag: Optional[str] = None):
+    if not tag:
+        return {"error": "No tag provided"}
+
+    url = f"https://cash.app/${tag}"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.connect_over_cdp(BROWSERLESS_WS)
+        context = await browser.new_context()
+        page = await context.new_page()
+        await page.goto(url, timeout=15000)
+
+        try:
+            name = await page.locator('[data-testid="profile-name"]').inner_text()
+            profile_pic = await page.locator('img[alt="profile"]').get_attribute('src')
+        except:
+            return {"error": "Profile not found or changed"}
+
+        return {
+            "name": name,
+            "cashtag": f"${tag}",
+            "profile_picture": profile_pic,
+        }
