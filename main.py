@@ -1,12 +1,11 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-import os
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 app = FastAPI()
 
-# CORS for FlutterFlow
+# CORS setup for FlutterFlow
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,37 +16,44 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "Cashtag Grabber API is running."}
+    return {"message": "Cashtag Grabber API is live."}
 
 @app.get("/cashtag")
-async def get_cashtag_info(tag: Optional[str] = Query(None)):
+def get_cashtag_info(tag: Optional[str] = None):
     if not tag:
         return {"error": "No tag provided"}
 
-    ws_endpoint = os.getenv("BROWSERLESS_WS")
-    if not ws_endpoint:
-        return {"error": "Browserless WebSocket URL not set"}
+    url = f"https://cash.app/{tag.lstrip('$')}"
 
-    url = f"https://cash.app/{tag}"
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=60000)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp(ws_endpoint)
-        context = await browser.new_context()
-        page = await context.new_page()
+            name_selector = "h2[class*=css]"
+            img_selector = "img[src*='/p/']"
 
-        await page.goto(url, wait_until="networkidle")
+            try:
+                name = page.inner_text(name_selector, timeout=5000)
+            except PlaywrightTimeout:
+                name = None
 
-        try:
-            name = await page.inner_text("h2.css-1dp5vir")
-            img = await page.get_attribute("img[alt*='Profile']", "src")
-            cashtag = await page.inner_text("div.css-18suhml span")
+            try:
+                image_url = page.locator(img_selector).get_attribute("src", timeout=5000)
+            except PlaywrightTimeout:
+                image_url = None
+
+            browser.close()
+
+            if not name and not image_url:
+                return {"error": f"Cashtag ${tag} not found or blocked"}
 
             return {
-                "name": name,
-                "cashtag": cashtag,
-                "profile_picture": img
+                "cashtag": f"${tag}",
+                "name": name or "Unknown",
+                "profile_picture": image_url or "Not available"
             }
-        except Exception as e:
-            return {"error": f"Failed to scrape: {str(e)}"}
-        finally:
-            await browser.close()
+
+    except Exception as e:
+        return {"error": f"Failed to scrape: {str(e)}"}
