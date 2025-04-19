@@ -8,7 +8,7 @@ app = FastAPI()
 # Allow FlutterFlow (and all origins for now)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this to your domain
+    allow_origins=["*"],  # In production, restrict this
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,7 +30,7 @@ async def scrape_profile(tag: str) -> dict:
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
-            # Look for required meta tags
+            # Grab name and image from OpenGraph meta tags
             name = await page.get_attribute('meta[property="og:title"]', 'content')
             profile_picture = await page.get_attribute('meta[property="og:image"]', 'content')
 
@@ -55,7 +55,4 @@ async def get_cashtag_info(tag: Optional[str] = Query(..., min_length=1)):
 
     data = await scrape_profile(tag)
 
-    if "error" in data:
-        return {"error": data["error"]}
-    
-    return {"cashtag_suggestions": [data]}
+    return data
