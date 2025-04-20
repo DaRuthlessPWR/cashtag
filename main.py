@@ -13,10 +13,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-def root():
-    return {"message": "Cashtag Grabber API is running."}
-
 @app.get("/cashtag")
 def get_cashtag_info(tag: Optional[str] = None):
     if not tag:
@@ -30,20 +26,25 @@ def get_cashtag_info(tag: Optional[str] = None):
             page.goto(url, timeout=20000)
             page.wait_for_load_state("networkidle")
 
-            # Optional: debug print the raw page HTML
-            print(page.content())
+            # wait a bit for JS-rendered content
+            page.wait_for_timeout(2000)
 
-            name_element = page.query_selector("h2[class^='chakra-heading']")
-            image_element = page.query_selector("img[class^='chakra-image']")
+            # Try locating with Chakra UI classes
+            name_locator = page.locator("h2[class^='chakra-heading']")
+            image_locator = page.locator("img[class^='chakra-image']")
 
-            name = name_element.inner_text().strip() if name_element else None
-            profile_picture = image_element.get_attribute("src") if image_element else None
+            name = name_locator.first.text_content(timeout=3000)
+            profile_picture = image_locator.first.get_attribute("src")
 
             if not name or not profile_picture:
+                # Log full page content if missing
+                print("DEBUG PAGE CONTENT ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+                print(page.content())
+                print("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
                 raise Exception("Profile data missing")
 
             return {
-                "name": name,
+                "name": name.strip(),
                 "cashtag": f"${tag}",
                 "profile_picture": profile_picture
             }
