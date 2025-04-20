@@ -23,24 +23,22 @@ def get_cashtag_info(tag: Optional[str] = None):
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             url = f"https://cash.app/${tag}"
-            page.goto(url, timeout=20000)
-            page.wait_for_load_state("networkidle")
+            page.goto(url, timeout=30000)
 
-            # wait a bit for JS-rendered content
+            # Wait until h2 appears (indicates page is interactive)
+            page.wait_for_selector("h2[class^='chakra-heading']", timeout=10000)
+
+            # Then wait a bit more just in case
             page.wait_for_timeout(2000)
 
-            # Try locating with Chakra UI classes
-            name_locator = page.locator("h2[class^='chakra-heading']")
-            image_locator = page.locator("img[class^='chakra-image']")
-
-            name = name_locator.first.text_content(timeout=3000)
-            profile_picture = image_locator.first.get_attribute("src")
+            # Grab the values
+            name = page.locator("h2[class^='chakra-heading']").first.text_content()
+            profile_picture = page.locator("img[class^='chakra-image']").first.get_attribute("src")
 
             if not name or not profile_picture:
-                # Log full page content if missing
-                print("DEBUG PAGE CONTENT ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓")
+                print("DEBUG HTML ↓↓↓↓↓↓↓↓")
                 print(page.content())
-                print("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
+                print("↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑")
                 raise Exception("Profile data missing")
 
             return {
