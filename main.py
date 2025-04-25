@@ -22,4 +22,4 @@ async def get_cashtag_info(tag: str = Query(..., min_length=1)):
             }
         except Exception:
             await browser.close()
-            return JSONResponse(status_code=404, content={"error": "User not found or blocked scraping."})
+            return JSONResponse(status_code=404, content={"error": "User not found or scraping blocked."})
