@@ -1,8 +1,6 @@
-# app/main.py
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from playwright.async_api import async_playwright
-import uvicorn
 
 app = FastAPI()
 
@@ -22,6 +20,6 @@ async def get_cashtag_info(tag: str = Query(..., min_length=1)):
                 "name": name,
                 "profile_image": img
             }
-        except Exception as e:
+        except Exception:
             await browser.close()
             return JSONResponse(status_code=404, content={"error": "User not found or blocked scraping."})
